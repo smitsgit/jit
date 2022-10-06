@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "jit"
+version = "0.1.0"
+description = "Awesome git clone"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.scripts]
+jit = "jit.main:app"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+typer = {extras = ["all"], version = "^0.6.1"}
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
