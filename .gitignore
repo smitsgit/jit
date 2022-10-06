@@ -1,2 +1,5 @@
 .venv
 git-test
+.idea
+__pycache__
+
