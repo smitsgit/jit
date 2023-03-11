@@ -1,9 +1,14 @@
 import hashlib
 import zlib
+import os
+from datetime import datetime
 
 import typer
 from pathlib import Path
 from dataclasses import dataclass
+
+from pytz import timezone
+from tzlocal import get_localzone
 
 app = typer.Typer()
 
@@ -38,7 +43,6 @@ class Repository:
             except PermissionError as e:
                 print(f"Permission denied {file}")
 
-
 @app.command()
 def init(name: str = "."):
     """
@@ -63,10 +67,43 @@ class Tree:
             content += mode + b' ' + item.name.encode() + b'\x00' + bytes.fromhex(item.sha)
         return content
 
+    @property
+    def sha(self):
+        return self._sha
+
+    @sha.setter
+    def sha(self, value):
+        self._sha = value
+
+
+class Commit:
+    def __init__(self, tree_sha, message):
+        self.tree_sha = tree_sha
+        self.message = message
+
+    def type(self):
+        return b"commit"
+
+    def serialize(self):
+        name = os.getenv("GIT_AUTHOR_NAME", "Smital Desai")
+        email = os.getenv("GIT_AUTHOR_EMAIL", "desaismital@gmail.com")
+        timestamp = datetime.now(timezone('UTC')).astimezone(get_localzone()).strftime("%s %z")
+        author = f"{name} <{email}> {timestamp}"
+        committer = author
+        content = f"tree {self.tree_sha}\nauthor {author}\ncommitter {author}\n\n{self.message}"
+        return content.encode("utf-8")
+
+    @property
+    def sha(self):
+        return self._sha
+
+    @sha.setter
+    def sha(self, value):
+        self._sha = value
 
 
 @app.command()
-def commit():
+def commit(message: str = typer.Option(..., "-m")):
     """
     list the files to commit - [ for the time being ]
     :return:
@@ -88,8 +125,10 @@ def commit():
     # out of the contents of all the entries which participated in that
     # commit
     tree = Tree(entries)
-    database.store_object(tree)
+    tree_sha = database.store_object(tree)
 
+    commit = Commit(tree_sha, message)
+    database.store_object(commit)
 
 @dataclass()
 class Entry:
@@ -98,14 +137,6 @@ class Entry:
 
 
 class Blob:
-    @property
-    def sha(self):
-        return self._sha
-
-    @sha.setter
-    def sha(self, value):
-        self._sha = value
-
     def __init__(self, data):
         self.data = data
         self._sha = None
@@ -116,6 +147,14 @@ class Blob:
     def serialize(self):
         return self.data
 
+    @property
+    def sha(self):
+        return self._sha
+
+    @sha.setter
+    def sha(self, value):
+        self._sha = value
+
 
 class Database:
     def __init__(self, db_path: Path):
@@ -124,6 +163,7 @@ class Database:
     def store_object(self, obj):
         content_to_write = self.get_content_bytes(obj)
         sha = self.hash_it(content_to_write, obj)
+        obj.sha = sha # Set the hash in the object's field
         # compute the path
         path = (self.path / sha[:2])
         path.mkdir(parents=True, exist_ok=True)
