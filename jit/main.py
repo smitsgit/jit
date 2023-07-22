@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from pytz import timezone
 from tzlocal import get_localzone
+from merry import Merry
 
 app = typer.Typer()
 
@@ -30,18 +31,12 @@ class Repository:
 
     def create_git_dir_structure(self):
         self.gitdir.mkdir(parents=True)
-
-        for dir in ["branches", "objects", "refs//tags", "refs//heads"]:
-            try:
-                (self.gitdir / dir).mkdir(parents=True)
-            except PermissionError as e:
-                print(f"Permission denied {dir}")
+        for dir_ in ["branches", "objects", "refs//tags", "refs//heads"]:
+            (self.gitdir / dir_).mkdir(parents=True)
 
         for file in ["description", "HEAD"]:
-            try:
-                (self.gitdir / file).touch()
-            except PermissionError as e:
-                print(f"Permission denied {file}")
+            (self.gitdir / file).touch()
+
 
 @app.command()
 def init(name: str = "."):
@@ -77,9 +72,10 @@ class Tree:
 
 
 class Commit:
-    def __init__(self, tree_sha, message):
+    def __init__(self, repo, tree_sha, message):
         self.tree_sha = tree_sha
         self.message = message
+        self.repo = repo
 
     def type(self):
         return b"commit"
@@ -90,7 +86,13 @@ class Commit:
         timestamp = datetime.now(timezone('UTC')).astimezone(get_localzone()).strftime("%s %z")
         author = f"{name} <{email}> {timestamp}"
         committer = author
-        content = f"tree {self.tree_sha}\nauthor {author}\ncommitter {author}\n\n{self.message}"
+        parent: Path = (self.repo.gitdir/"HEAD").read_text()
+        if parent:
+            content = f"tree {self.tree_sha}\nparent {parent}\nauthor {author}\ncommitter {author}\n\n{self.message}"
+        else:
+            # skip parent
+            content = f"tree {self.tree_sha}\nauthor {author}\ncommitter {author}\n\n{self.message}"
+        print(content)
         return content.encode("utf-8")
 
     @property
@@ -127,8 +129,11 @@ def commit(message: str = typer.Option(..., "-m")):
     tree = Tree(entries)
     tree_sha = database.store_object(tree)
 
-    commit = Commit(tree_sha, message)
+    commit = Commit(repo, tree_sha, message)
     database.store_object(commit)
+    path = repo.gitdir/"HEAD"
+    path.write_text(commit.sha + "\n")
+
 
 @dataclass()
 class Entry:
@@ -163,7 +168,7 @@ class Database:
     def store_object(self, obj):
         content_to_write = self.get_content_bytes(obj)
         sha = self.hash_it(content_to_write, obj)
-        obj.sha = sha # Set the hash in the object's field
+        obj.sha = sha  # Set the hash in the object's field
         # compute the path
         path = (self.path / sha[:2])
         path.mkdir(parents=True, exist_ok=True)
