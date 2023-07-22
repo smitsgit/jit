@@ -86,7 +86,7 @@ class Commit:
         timestamp = datetime.now(timezone('UTC')).astimezone(get_localzone()).strftime("%s %z")
         author = f"{name} <{email}> {timestamp}"
         committer = author
-        parent: Path = (self.repo.gitdir/"HEAD").read_text()
+        parent: Path = (self.repo.gitdir / "HEAD").read_text()
         if parent:
             content = f"tree {self.tree_sha}\nparent {parent}\nauthor {author}\ncommitter {author}\n\n{self.message}"
         else:
@@ -131,7 +131,7 @@ def commit(message: str = typer.Option(..., "-m")):
 
     commit = Commit(repo, tree_sha, message)
     database.store_object(commit)
-    path = repo.gitdir/"HEAD"
+    path = repo.gitdir / "HEAD"
     path.write_text(commit.sha + "\n")
 
 
@@ -175,6 +175,9 @@ class Database:
         print(path)
 
         path = (path / sha[2:])
+        if path.exists():
+            print(f"Object as {path} already exists. Skipping overwriting un-necessarily")
+            return sha
         with open(path, "wb") as file:
             file.write(zlib.compress(content_to_write))
         return sha
