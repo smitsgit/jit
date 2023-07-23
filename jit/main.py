@@ -56,10 +56,9 @@ class Tree:
         return b"tree"
 
     def serialize(self):
-        mode = b'100644'
         content = b''
         for item in self.entries:
-            content += mode + b' ' + item.name.encode() + b'\x00' + bytes.fromhex(item.sha)
+            content += f"{item.mode:o}".encode() + b' ' + item.name.encode() + b'\x00' + bytes.fromhex(item.sha)
         return content
 
     @property
@@ -121,7 +120,7 @@ def commit(message: str = typer.Option(..., "-m")):
             file_content = fd.read()
             blob = Blob(file_content)
             sha = database.store_object(blob)
-            entries.append(Entry(item.name, sha))
+            entries.append(Entry(item.name, sha, item.stat().st_mode))
 
     # Tree is a snapshot of all the entries, so it should be made
     # out of the contents of all the entries which participated in that
@@ -139,6 +138,7 @@ def commit(message: str = typer.Option(..., "-m")):
 class Entry:
     name: str
     sha: str
+    mode: int
 
 
 class Blob:
